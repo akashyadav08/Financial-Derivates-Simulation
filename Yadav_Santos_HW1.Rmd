@@ -1,0 +1,780 @@
+---
+title: "Pricing Financial Derivates HW1"
+author: "Akash Yadav, Lucas Costa Santos"
+date: '2023-03-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 1. Simulation of log-normal Binomial asset prices
+
+1. Let us first recall that asset price at each step $j = 1,...., N$ is given by
+
+$$S_{j\Delta t} = S_{(j-1)\Delta t} e^{\sigma\sqrt{\Delta t} X_j + \mu \Delta t} $$
+where $X_1,....,X_N$ are iid random variables taking values +1 and -1 with probability $p$ and $1-p$ and risk-neutral probability is given by
+
+$$p = \frac{e^{(r-\mu)\Delta t} - e^{-\sigma \sqrt{\Delta t}}}{e^{\sigma \sqrt{\Delta t}} - e^{-\sigma \sqrt{\Delta t}}}$$
+
+We begin by loading libraries that help us sample from a Bernoulli distribution.
+
+```{r libraries_load}
+library(purrr) # library for sample from bernoulli distribution.
+library(ggplot2) 
+```
+
+### For one specific value of each parameter
+
+Case I: for $N = 1000$, we set-up some initial values for drift $\mu \in \mathbb{R}$, volatility $\sigma > 0$ and interest rate $r >0$.
+
+
+```{r initial_setup_Nk}
+sig <- 0.5
+mu <- 1
+r <- 0.025
+T <- 1
+N <- 1000
+df <- data.frame(matrix (ncol = 0, nrow = N)) # empty df for multiple sig, mu, r values
+S_k <- rep(0, N) # empty vector for our initial test setup
+S_k[1] <- 1000
+
+```
+
+After sampling from the Bernoulli distribution with probability $p$, we turn all TRUE values to +1 and all FALSE values to -1. Next, we check that our parameters satisfy the no-arbitrage condition,
+
+$$-\sqrt{\frac{N}{T}} < \frac{\mu -r}{\sigma} < \sqrt{\frac{N}{T}}$$, where $T=1$. If however no-arbitrage condition is violated it returns NA. Here, we run the model for specific values of parameter. Later, we will run this with different values the parameters can take, plot them simultaneously and compare.
+
+```{r sequential_update_Nk, warning=FALSE}
+set.seed(123) # seed for reproducibility
+
+# risk-neutral probability
+p <- (exp((r-mu)*(T/N)) - exp(-sig*sqrt(T/N)))/(exp(sig*sqrt(T/N)) - exp(-sig*sqrt(T/N)))
+# Bernoulli draws
+x <- rbernoulli(N, p)
+# Labels TRUE to +1 FALSE to -1
+x<- ifelse(x, 1, -1)
+for (i in 2:N){
+  # test for no-arbit condition
+  if (abs((mu-r)/sig) < sqrt(N/T)){
+    # sequential update of asset-price
+    S_k[i] = S_k[i-1]*exp((sig*sqrt(T/N)*x[i])+(mu*(T/N)))
+  }else{
+    # if no-arbit condition is violated
+    S_k[i] = NA
+  }
+}
+
+```
+
+
+Case II: for $N = 100$, here we have used the same parameter values as before.
+
+```{r initial_setup_Nh}
+N_h <- 100
+df_h <- data.frame(matrix (ncol = 0, nrow = N_h))
+S_h <- rep(0, N_h)
+S_h[1] <- 1000
+```
+
+```{r sequential_update_Nh}
+p <- (exp((r-mu)*(T/N_h)) - exp(-sig*sqrt(T/N_h)))/(exp(sig*sqrt(T/N_h)) - exp(-sig*sqrt(T/N_h)))
+x <- rbernoulli(N_h, p)
+x<- ifelse(x, 1, -1)
+for (i in 2:N_h){
+  if (abs((mu-r)/sig) < sqrt(N/T)){
+    S_h[i] = S_h[i-1]*exp((sig*sqrt(T/N_h)*x[i])+(mu*(T/N_h)))
+  } else {
+    S_h[i] = NA
+  }
+}  
+```
+
+Case III: for $N = 10$. Once again we use the same parameter values.
+
+```{r initial_setup_Nt}
+N_t <- 10
+df_t <- data.frame(matrix (ncol = 0, nrow = N_t))
+S_t <- rep(0, N_t)
+S_t[1] <- 1000
+```
+
+```{r sequential_update_Nt}
+p <- (exp((r-mu)*(T/N_t)) - exp(-sig*sqrt(T/N_t)))/(exp(sig*sqrt(T/N_t)) - exp(-sig*sqrt(T/N_t)))
+x <- rbernoulli(N_t, p)
+x<- ifelse(x, 1, -1)
+for (i in 2:N_t){
+  if (abs((mu-r)/sig) < sqrt(N/T)){
+    S_t[i] = S_t[i-1]*exp((sig*sqrt(T/N_t)*x[i])+(mu*(T/N_t)))
+  } else {
+    S_t[i] = NA
+  }
+}
+```
+
+We can now plot the asset price versus time for all three cases. We notice, upon changing the sign of $\mu$ from positive to negative, for $N=100$, asset price at maturity is negative and positive respectively. We see this behavior repeat when we do the analysis for different values of $\mu$ (shown below). This is quite evident if we calculate values risk-neutral probability, $p$, takes for positive and negative $\mu$, for typical values of $\sigma$ and $r$. 
+ 
+
+
+```{r plot_for_all_initial_different_N}
+# setting the time axis at Delta t interval
+time <- seq(T/N , T, T/N) 
+time_h <- seq(T/N_h, T, T/N_h)
+time_t <- seq(T/N_t, T, T/N_t)
+# plotting for different N values 
+plot(time, S_k, type = 'l', col = "blue", main="N=1000, sig=0.5, mu=1, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+plot(time_h, S_h, type = 'l', col = "green", main="N=100, sig=0.5, mu=1, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+plot(time_t, S_t, type = 'l', col = "orange", main="N=10, sig=0.5, mu=1, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+```
+
+### For a range of values for parameters
+
+To compare and contrast for different values of parameters, we first run the asset pricing model for all different combinations of these parameter values, always checking first the no-arbitrage condition, then setting a fixed seed inside the loop to ensure we use the same realization of the Bernoulli sample which sets the stage for comparing how $\mu$ and $\sigma$ affects the asset price.
+
+
+```{r for_different_values_Nk}
+# loop for different sigma values
+for (sig in c(0.1,0.25,0.5, 0.75)){
+  # loop for different mu values
+  for (mu in c(-1, 0, 1, 5)){
+    # loop for different r values
+    for (r in c(0.025, 0.05, 0.075, 0.1)){
+      # risk-neutral probability
+      p <- (exp((r-mu)*(T/N)) - exp(-sig*sqrt(T/N)))/(exp(sig*sqrt(T/N)) - exp(-sig*sqrt(T/N)))
+      #in order to use same random numbers we set the seed inside the loop.
+      set.seed(123)
+      # Bernoulli draws
+      x <- rbernoulli(N, p)
+      # Labels TRUE to +1 FALSE to -1
+      x <- ifelse(x, 1, -1)
+      a <- sig*sqrt(T/N)
+      b <- mu*(T/N)
+      for (i in 2:N){
+        # test for no-arbit condition
+        if (abs((mu-r)/sig) < sqrt(N/T)){
+          # sequential update of asset-price
+          S_k[i] = S_k[i-1]*exp((sig*sqrt(T/N)*x[i])+(mu*(T/N)))
+        } else{
+          # if no-arbit condition is violated
+          S_k[i] = NA
+        }
+      }
+      df <- cbind.data.frame(df, S_k)
+    }
+  }
+}
+```
+
+
+
+```{r adjusting_col_names_df, echo=FALSE}
+colnames(df)[1:4] <- paste("sig 0.1 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[5:8] <- paste("sig 0.1 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[9:12] <- paste("sig 0.1 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[13:16] <- paste("sig 0.1 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[17:20] <- paste("sig 0.25 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[21:24] <- paste("sig 0.25 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[25:28] <- paste("sig 0.25 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[29:32] <- paste("sig 0.25 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[33:36] <- paste("sig 0.5 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[37:40] <- paste("sig 0.5 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[41:44] <- paste("sig 0.5 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[45:48] <- paste("sig 0.5 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[49:52] <- paste("sig 0.75 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[53:56] <- paste("sig 0.75 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[57:60] <- paste("sig 0.75 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df)[61:64] <- paste("sig 0.75 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+```
+
+
+
+```{r adding_time_column}
+df <- cbind.data.frame(time, df)
+```
+
+### Different $\mu$
+
+```{r plot_different_mu}
+# plot for different values of mu
+plot(df$time, df$`sig 0.1 , mu -1 , r0.025`, type = 'l', col = "blue", ylim = c(900, 1100), main="N=1000, sig=0.1, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+lines(df$time, df$`sig 0.1 , mu 0 , r0.025`, type = 'l', col = "green")
+lines(df$time, df$`sig 0.1 , mu 1 , r0.025`, type = 'l', col = "orange")
+lines(df$time, df$`sig 0.1 , mu 5 , r0.025`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("topleft", legend=c("mu = -1", "mu = 0", "mu = 1", "mu = 5"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+```
+### Different $\sigma$
+
+As expected, for larger values of volatility, $\sigma$ asset prices fluctuate a lot more. This trend is also seen for different values of $N$.
+
+```{r plot_different_sigma}
+# plot for different values of sigma
+plot(df$time, df$`sig 0.1 , mu 0 , r0.05`, type = 'l', col = "blue", ylim = c(400, 1400), main="N=1000, mu=0, r=0.05" , ylab = "Asset Price" , xlab = "Time")
+lines(df$time, df$`sig 0.25 , mu 0 , r0.05`, type = 'l', col = "green")
+lines(df$time, df$`sig 0.5 , mu 0 , r0.05`, type = 'l', col = "orange")
+lines(df$time, df$`sig 0.75 , mu 0 , r0.05`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("bottomleft", legend=c("sig = 0.1", "sig = 0.25", "sig = 0.5", "sig = 0.75"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+```
+
+### Different $r$
+
+For different values of the interest rate $r$, we have highest asset price at maturity for highest interest rate which makes complete sense. Moreover, this can be mathematically inferred from risk-neutral probability, probability of $X_i$ taking value +1 is more if $r$ is larger keeping other parameters constant. 
+
+```{r plot_different_r}
+# plot for different values of interest rate
+plot(df$time, df$`sig 0.1 , mu 0 , r0.025`, type = 'l', col = "blue", ylim = c(900, 1100), main="N=1000, mu=0, sig=0.1" , ylab = "Asset Price" , xlab = "Time")
+lines(df$time, df$`sig 0.1 , mu 0 , r0.05`, type = 'l', col = "green")
+lines(df$time, df$`sig 0.1 , mu 0 , r0.075`, type = 'l', col = "orange")
+lines(df$time, df$`sig 0.1 , mu 0 , r0.1`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("bottomleft", legend=c("r = 0.025", "r = 0.05", "r = 0.075", "r = 0.1"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+
+```
+
+
+Once again, we run this analysis for $N=100$ and $N=10$ below.
+
+```{r for_different_values_Nh}
+for (sig in c(0.1,0.25,0.5, 0.75)){
+  for (mu in c(-1, 0, 1, 5)){
+    for (r in c(0.025, 0.05, 0.075, 0.1)){
+      p <- (exp((r-mu)*(T/N_h)) - exp(-sig*sqrt(T/N_h)))/(exp(sig*sqrt(T/N_h)) - exp(-sig*sqrt(T/N_h)))
+      set.seed(123)
+      x <- rbernoulli(N_h, p)
+      x <- ifelse(x, 1, -1)
+      a <- sig*sqrt(T/N_h)
+      b <- mu*(T/N_h)
+      for (i in 2:N_h){
+        if (abs((mu-r)/sig) < sqrt(N_h/T)){
+          S_h[i] = S_h[i-1]*exp((sig*sqrt(T/N_h)*x[i])+(mu*(T/N_h)))
+        } else{
+          S_h[i] = NA
+        }
+      }
+      df_h <- cbind.data.frame(df_h, S_h)
+    }
+  }
+}
+```
+
+
+
+```{r adjusting_col_names_df_h, echo=FALSE}
+colnames(df_h)[1:4] <- paste("sig 0.1 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[5:8] <- paste("sig 0.1 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[9:12] <- paste("sig 0.1 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[13:16] <- paste("sig 0.1 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[17:20] <- paste("sig 0.25 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[21:24] <- paste("sig 0.25 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[25:28] <- paste("sig 0.25 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[29:32] <- paste("sig 0.25 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[33:36] <- paste("sig 0.5 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[37:40] <- paste("sig 0.5 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[41:44] <- paste("sig 0.5 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[45:48] <- paste("sig 0.5 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[49:52] <- paste("sig 0.75 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[53:56] <- paste("sig 0.75 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[57:60] <- paste("sig 0.75 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_h)[61:64] <- paste("sig 0.75 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+```
+
+```{r adding_time_h_column}
+df_h <- cbind.data.frame(time_h, df_h)
+```
+
+
+```{r plot_h_different_mu}
+# plot for different values of mu
+plot(df_h$time_h, df_h$`sig 0.25 , mu -1 , r0.025`, type = 'l', col = "blue", ylim = c(850, 1400), main="N=100, sig=0.25, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+lines(df_h$time_h, df_h$`sig 0.25 , mu 0 , r0.025`, type = 'l', col = "green")
+lines(df_h$time_h, df_h$`sig 0.25 , mu 1 , r0.025`, type = 'l', col = "orange")
+lines(df_h$time_h, df_h$`sig 0.25 , mu 5 , r0.025`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("topleft", legend=c("mu = -1", "mu = 0", "mu = 1", "mu = 5"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.6)
+```
+
+
+```{r plot_h_different_sigma}
+# plot for different values of sigma
+plot(df_h$time_h, df_h$`sig 0.1 , mu 0 , r0.05`, type = 'l', col = "blue", ylim = c(600, 2200), main="N=100, mu=0, r=0.05" , ylab = "Asset Price" , xlab = "Time")
+lines(df_h$time_h, df_h$`sig 0.25 , mu 0 , r0.05`, type = 'l', col = "green")
+lines(df_h$time_h, df_h$`sig 0.5 , mu 0 , r0.05`, type = 'l', col = "orange")
+lines(df_h$time_h, df_h$`sig 0.75 , mu 0 , r0.05`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("bottomleft", legend=c("sig = 0.1", "sig = 0.25", "sig = 0.5", "sig = 0.75"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.6)
+```
+
+Blue and Green lines seem to appear out of thin air! No need to worry, looking at the dataframe that stores all the asset prices, we observe that asset price for initial time-steps is same for all different values of $r$, a facet of fixing the seed for the random sample, therefore our graph looks like it starts abruptly. However, this is just an artifact of plotting same values over existing plots.   
+
+```{r plot_h_different_r}
+# plot for different values of interest rate
+plot(df_h$time, df_h$`sig 0.1 , mu 0 , r0.025`, type = 'l', col = "blue", ylim = c(940, 1200), main="N=100, mu=0, sig=0.1" , ylab = "Asset Price" , xlab = "Time")
+lines(df_h$time, df_h$`sig 0.1 , mu 0 , r0.05`, type = 'l', col = "green")
+lines(df_h$time, df_h$`sig 0.1 , mu 0 , r0.075`, type = 'l', col = "orange")
+lines(df_h$time, df_h$`sig 0.1 , mu 0 , r0.1`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("bottomleft", legend=c("r = 0.025", "r = 0.05", "r = 0.075", "r = 0.1"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+
+```
+
+
+
+```{r for_different_values_Nt}
+for (sig in c(0.1,0.25,0.5, 0.75)){
+  for (mu in c(-1, 0, 1, 5)){
+    for (r in c(0.025, 0.05, 0.075, 0.1)){
+      p <- (exp((r-mu)*(T/N_t)) - exp(-sig*sqrt(T/N_t)))/(exp(sig*sqrt(T/N_t)) - exp(-sig*sqrt(T/N_t)))
+      set.seed(123)
+      x <- rbernoulli(N_t, p)
+      x <- ifelse(x, 1, -1)
+      a <- sig*sqrt(T/N_t)
+      b <- mu*(T/N_t)
+      for (i in 2:N_t){
+        if (abs((mu-r)/sig) < sqrt(N_t/T)){
+          S_t[i] = S_t[i-1]*exp((sig*sqrt(T/N_t)*x[i])+(mu*(T/N_t)))
+        } else{
+          S_t[i] = NA
+        }
+      }
+      df_t <- cbind.data.frame(df_t, S_t)
+    }
+  }
+}
+```
+
+
+
+```{r adjusting_col_names_df_t, echo=FALSE}
+colnames(df_t)[1:4] <- paste("sig 0.1 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[5:8] <- paste("sig 0.1 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[9:12] <- paste("sig 0.1 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[13:16] <- paste("sig 0.1 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[17:20] <- paste("sig 0.25 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[21:24] <- paste("sig 0.25 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[25:28] <- paste("sig 0.25 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[29:32] <- paste("sig 0.25 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[33:36] <- paste("sig 0.5 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[37:40] <- paste("sig 0.5 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[41:44] <- paste("sig 0.5 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[45:48] <- paste("sig 0.5 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[49:52] <- paste("sig 0.75 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[53:56] <- paste("sig 0.75 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[57:60] <- paste("sig 0.75 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_t)[61:64] <- paste("sig 0.75 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+```
+
+```{r adding_time_t_column}
+df_t <- cbind.data.frame(time_t, df_t)
+```
+
+```{r plot_t_different_mu}
+# plot for different values of mu
+plot(df_t$time_t, df_t$`sig 0.5 , mu -1 , r0.025`, type = 'l', col = "blue", ylim = c(900, 1700) , main="N=10, sig=0.5, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+lines(df_t$time_t, df_t$`sig 0.5 , mu 0 , r0.025`, type = 'l', col = "green")
+lines(df_t$time_t, df_t$`sig 0.5 , mu 1 , r0.025`, type = 'l', col = "orange")
+lines(df_t$time_t, df_t$`sig 0.5 , mu 5 , r0.025`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("topleft", legend=c("mu = -1", "mu = 0", "mu = 1", "mu = 5"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+```
+
+
+```{r plot_t_different_sigma}
+# plot for different values of sigma
+plot(df_t$time_t, df_t$`sig 0.1 , mu 0 , r0.05`, type = 'l', col = "blue", ylim = c(970, 1700), main="N=10, mu=0, r=0.05" , ylab = "Asset Price" , xlab = "Time")
+lines(df_t$time_t, df_t$`sig 0.25 , mu 0 , r0.05`, type = 'l', col = "green")
+lines(df_t$time_t, df_t$`sig 0.5 , mu 0 , r0.05`, type = 'l', col = "orange")
+lines(df_t$time_t, df_t$`sig 0.75 , mu 0 , r0.05`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("topleft", legend=c("sig = 0.1", "sig = 0.25", "sig = 0.5", "sig = 0.75"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+```
+
+```{r plot_t_different_r}
+# plot for different values of interest rate
+plot(df_t$time, df_t$`sig 0.1 , mu 0 , r0.025`, type = 'l', col = "blue", ylim = c(990, 1300), main="N=10, mu=0, sig=0.1" , ylab = "Asset Price" , xlab = "Time")
+lines(df_t$time, df_t$`sig 0.1 , mu 0 , r0.05`, type = 'l', col = "green")
+lines(df_t$time, df_t$`sig 0.1 , mu 0 , r0.075`, type = 'l', col = "orange")
+lines(df_t$time, df_t$`sig 0.1 , mu 0 , r0.1`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("topleft", legend=c("r = 0.025", "r = 0.05", "r = 0.075", "r = 0.1"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+
+```
+
+
+
+```{r initial_setup_Ntk}
+N_tk <- 10000
+df_tk <- data.frame(matrix (ncol = 0, nrow = N_tk))
+S_tk <- rep(0, N_tk)
+S_tk[1] <- 1000
+```
+
+### Drift plays no role for large $N$
+
+2. To see if the model actually converges for different $\mu$s for large $N$, we put a seed in the loop to obtain same distribution of $X_i$'s every time. We observe that for different values of $\mu$ keeping other parameters same, asset prices do converge for large $N$. Observing the trend from $N=10$, $N=100$, $N=1000$ and $N=10000$ we see that the spread between the most extreme asset prices at maturity increases as $N$ decreases, i.e. difference between the highest and lowest asset price at maturity is larger for lower value of $N$.
+
+This result can be theoretically seen by computing the expectation and variance of our Bernoulli-like process where $X_i$ takes value +1 with probability $p$ and -1 with probability $1-p$. Then substituting the risk neutral probability and taking the limit we have, $S_T$ converges in distribution as $N \rightarrow \infty$ to
+
+$$S_0 e^{\sigma N(0,T)+(r-\frac{1}{2}\sigma^2)T}$$
+
+```{r for_different_values_Ntk}
+for (sig in c(0.1,0.25,0.5, 0.75)){
+  for (mu in c(-1, 0, 1, 5)){
+    for (r in c(0.025, 0.05, 0.075, 0.1)){
+      p <- (exp((r-mu)*(T/N_tk)) - exp(-sig*sqrt(T/N_tk)))/(exp(sig*sqrt(T/N_tk)) - exp(-sig*sqrt(T/N_tk)))
+      set.seed(123)
+      x <- rbernoulli(N_tk, p)
+      x <- ifelse(x, 1, -1)
+      a <- sig*sqrt(T/N_tk)
+      b <- mu*(T/N_tk)
+      for (i in 2:N_tk){
+        if (abs((mu-r)/sig) < sqrt(N_tk/T)){
+          S_tk[i] = S_tk[i-1]*exp((sig*sqrt(T/N_tk)*x[i])+(mu*(T/N_tk)))
+        } else{
+          S_tk[i] = NA
+        }
+      }
+      df_tk <- cbind.data.frame(df_tk, S_tk)
+    }
+  }
+}
+```
+
+```{r adjusting_col_names_df_tk, echo=FALSE}
+colnames(df_tk)[1:4] <- paste("sig 0.1 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[5:8] <- paste("sig 0.1 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[9:12] <- paste("sig 0.1 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[13:16] <- paste("sig 0.1 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[17:20] <- paste("sig 0.25 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[21:24] <- paste("sig 0.25 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[25:28] <- paste("sig 0.25 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[29:32] <- paste("sig 0.25 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[33:36] <- paste("sig 0.5 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[37:40] <- paste("sig 0.5 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[41:44] <- paste("sig 0.5 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[45:48] <- paste("sig 0.5 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[49:52] <- paste("sig 0.75 , mu -1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[53:56] <- paste("sig 0.75 , mu 0 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[57:60] <- paste("sig 0.75 , mu 1 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+colnames(df_tk)[61:64] <- paste("sig 0.75 , mu 5 , r", c(0.025, 0.05, 0.075, 0.1), sep = "")
+```
+
+```{r adding_time_tk_column}
+time_tk <- seq(T/N_tk, T, T/N_tk)
+df_tk <- cbind.data.frame(time_tk, df_tk)
+```
+
+```{r plot_tk_different_mu}
+# plot for different values of mu
+plot(df_tk$time_tk, df_tk$`sig 0.5 , mu -1 , r0.025`, type = 'l', col = "blue", ylim = c(400, 1200) , main="N=10000, sig=0.5, r=0.025" , ylab = "Asset Price" , xlab = "Time")
+lines(df_tk$time_tk, df_tk$`sig 0.5 , mu 0 , r0.025`, type = 'l', col = "green")
+lines(df_tk$time_tk, df_tk$`sig 0.5 , mu 1 , r0.025`, type = 'l', col = "orange")
+lines(df_tk$time_tk, df_tk$`sig 0.5 , mu 5 , r0.025`, type = 'l', col = "red")
+grid(nx = NULL, ny = NULL, lty = 2, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+legend("bottomleft", legend=c("mu = -1", "mu = 0", "mu = 1", "mu = 5"),
+       col=c("blue", "green", "orange", "red"), lty = 1, cex=0.8)
+```
+
+## Exercise 2. Plot of Vanilla Option Prices
+
+```{r libraries_load2, include=FALSE}
+pacman::p_load("NMOF", "RQuantLib","ggplot2","ggthemes")
+rm(list = ls())
+```
+
+##### 2.1 Consider a six-months European call with strike K and interest rate r > 0. Fix a value of K and r>0. Plot the value of the premium C0 as a function of S0 and in the same plot, draw the optimal upper and lower bounds found for a European call in Chapter 1 in terms of S0, and in the same plot draw the payoff of the option. Comment the plot.
+
+
+```{r}
+# creating the function for intrinsic value
+intrinsic_value <- function(st, k) {
+  pmax(st - k, 0)
+}
+
+# defining set of values
+S0 <- seq(1:100)
+K <- 30 # fixing the strike value (K)
+r <- 0.05 # fixing a r
+
+
+# simulating the intrinsic value for different scenarios
+premium = c()
+for (i in S0){
+  p = intrinsic_value(i, K)
+  premium <- c(premium, p)
+}
+
+premium_df <- as.data.frame(premium)
+premium_df$s0 <- S0
+
+T <- 0.5 #time to maturity
+
+# defining upper and lower bounds
+premium_df$upper_bound <- premium_df$s0
+premium_df$lower_bound <- pmax(premium_df$s0 - K*exp(-r*T), 0)
+
+# plotting some values for the black-scholes
+
+BlackScholes <- function(S, K, r, T, sig){
+  d1 <- (log(S/K) + (r + sig^2/2)*T) / (sig*sqrt(T))
+  d2 <- d1 - sig*sqrt(T)
+  
+  value <- S*pnorm(d1) - K*exp(-r*T)*pnorm(d2)
+  return(value)
+}
+
+
+# defining set of values
+S0 <- seq(1:100)
+K <- 30 # fixing the strike value (K)
+r <- 0.05 # fixing a r
+T <- 0.5
+vol <- 0.2
+
+# simulating the intrinsic value for different scenarios
+premium_bs = c()
+for (i in S0){
+  p = BlackScholes(i, K, r, T, vol)
+  premium_bs <- c(premium_bs, p)
+}
+
+premium_bs_df <- as.data.frame(premium_bs)
+premium_bs_df$s0 <- S0
+
+```
+
+
+
+```{r}
+
+# Adding the Black-Scholes model
+
+premium_df$premium_bs <- premium_bs_df$premium_bs
+
+ggplot(data = premium_df, aes(x = S0)) +
+  geom_line(aes(y = premium, colour = "Payoff")) +
+  geom_line(aes(y = upper_bound, colour = "Upper bound")) +
+  geom_line(aes(y = lower_bound, colour = "Lower bound")) +
+  geom_line(aes(y = premium_bs, colour = "Premium (BS)")) +
+  scale_colour_manual("",
+                      breaks = c("Payoff", "Upper bound", "Lower bound", "Premium (BS)"),
+                      values = c("orange", "blue", "green", "black")) +
+  theme_classic() +
+  labs(x = "Underlying asset price (St)", y = "Payoff") +
+  ggtitle("Payoff vs St (for a European Call)") 
+
+
+
+```
+
+First we plot the payoff (represented by the orange line) and the bounds (upper bound represented by the dotted blue line and the lower by the dashed blue line). The payoff was defined as $max(S_t-K, 0)$, the upper and lower bound respectively as $S_t$ and $max(S_t - Ke^{-rT}, 0)$. It's possible to see that the premium of the European Call (represented by the black line), in this case estimated with help of the Black-Scholes model, respect the limits traced by the upper and lower bound.
+
+
+
+##### 2.2 Do the same as in 1 for a six-months European binary (digital) call. 
+
+
+```{r}
+#Defining the function of the premium value
+intrinsic_value_binary <- function(st, k) {
+    ifelse(st > k, 1, 0)
+  }
+
+# defining set of values
+S0 <- seq(1:100)
+K <- 30 # fixing the strike value (K)
+r <- 0.05 # fixing a r
+
+
+premium = c()
+for (i in S0){
+  p = intrinsic_value_binary(i, K)
+  premium <- c(premium, p)
+}
+
+premium_df <- as.data.frame(premium)
+premium_df$s0 <- S0
+
+
+
+T <- 0.5 #time to maturity
+
+# defining upper and lower bounds
+premium_df$lower_bound <- 0
+premium_df$upper_bound <- pmin(premium_df$s0/K, exp(-r*(1-T)))
+
+# Black-Scholes for binary calls #DC0 = e−rT N(d2)
+
+BlackScholes <- function(S, K, r, T, sig){
+  d1 <- (log(S/K) + (r + sig^2/2)*T) / (sig*sqrt(T))
+  d2 <- d1 - sig*sqrt(T)
+  
+  value <- exp(-r*T)*pnorm(d2)
+  return(value)
+}
+
+# defining set of values
+S0 <- seq(1:100)
+K <- 30 # fixing the strike value (K)
+r <- 0.05 # fixing a r
+T <- 0.5
+vol <- 0.2
+
+# simulating the intrinsic value for different scenarios
+premium_bs = c()
+for (i in S0){
+  p = BlackScholes(i, K, r, T, vol)
+  premium_bs <- c(premium_bs, p)
+}
+
+premium_bs_df <- as.data.frame(premium_bs)
+premium_bs_df$s0 <- S0
+
+```
+
+```{r}
+# Adding the Black-Scholes model
+
+premium_df$premium_bs <- premium_bs_df$premium_bs
+
+ggplot(data = premium_df, aes(x = S0)) +
+  geom_line(aes(y = premium, colour = "Payoff")) +
+  geom_line(aes(y = upper_bound, colour = "Upper bound")) +
+  geom_line(aes(y = lower_bound, colour = "Lower bound")) +
+  geom_line(aes(y = premium_bs, colour = "Premium (BS)")) +
+  scale_colour_manual("",
+                      breaks = c("Payoff", "Upper bound", "Lower bound", "Premium (BS)"),
+                      values = c("orange", "blue", "green", "black")) +
+  theme_classic() +
+  labs(x = "Underlying asset price (St)", y = "Payoff") +
+  ggtitle("Payoff vs St (for a European Binary Digital Call)") +
+  ylim(0, 1)
+
+
+```
+
+Following the same procedure as in 2.1, we first plot the payoff and the bounds for the European Binary Call and then plot the premium (black line) estimated with the Black-Scholes model. Different from the payoff, the estimated premium using Black-Scholes formula give a more smooth transition around $S_t = K$. The payoff in this case is given by if $S_t > K$, then $S_t = 1$ and $S_t = 0$ otherwise. The upper bound is 0 and the lower bound is given by $min(S_tK^{-1}, e^{-r(1-T)})$.
+
+
+##### 2.3 Do the same as in 1 for a six-months European straddle option.
+
+```{r}
+#Defining the function of the premium value
+intrinsic_value_straddle <- function(st, k) {
+  pmax(st - k, 0) + pmax(k - st, 0)
+}
+
+S0 <- seq(1:100)
+K <- 30 # fixing the strike value (K)
+r <- 0.05 # fixing a r
+
+premium = c()
+for (i in S0){
+  p = intrinsic_value_straddle(i, K)
+  premium <- c(premium, p)
+}
+
+premium_df <- as.data.frame(premium)
+premium_df$s0 <- S0
+
+T <- 0 #time to maturity
+premium_df$upper_bound <- premium_df$s0 + K
+premium_df$lower_bound <- pmax(premium_df$s0 - K*exp(-r*T), K*exp(-r*T) - premium_df$s0)
+
+# plotting values for the black-scholes
+
+BlackScholes <- function(S, K, r, T, sig, type){
+  
+  if(type=="C"){
+  d1 <- (log(S/K) + (r + sig^2/2)*T) / (sig*sqrt(T))
+  d2 <- d1 - sig*sqrt(T)
+  
+  value <- S*pnorm(d1) - K*exp(-r*T)*pnorm(d2)
+  return(value)}
+  
+  if(type=="P"){
+  d1 <- (log(S/K) + (r + sig^2/2)*T) / (sig*sqrt(T))
+  d2 <- d1 - sig*sqrt(T)
+  
+  value <-  (K*exp(-r*T)*pnorm(-d2) - S*pnorm(-d1))
+  return(value)}
+}
+
+# defining set of values
+S0 <- seq(1:100)
+K <- 30 # fixing the strike value (K)
+r <- 0.05 # fixing a r
+T <- 0.5
+vol <- 0.2
+
+# simulating the intrinsic value for different scenarios
+premium_bs = c()
+for (i in S0){
+  p = BlackScholes(i, K, r, T, vol, "C") + BlackScholes(i, K, r, T, vol, "P")
+  premium_bs <- c(premium_bs, p)
+}
+
+premium_bs_df <- as.data.frame(premium_bs)
+premium_bs_df$s0 <- S0
+
+```
+
+```{r}
+# Adding the Black-Scholes model
+
+premium_df$premium_bs <- premium_bs_df$premium_bs
+
+ggplot(data = premium_df, aes(x = S0)) +
+  geom_line(aes(y = premium, colour = "Payoff")) +
+  geom_line(aes(y = upper_bound, colour = "Upper bound")) +
+  geom_line(aes(y = lower_bound, colour = "Lower bound")) +
+  geom_line(aes(y = premium_bs, colour = "Premium (BS)")) +
+  scale_colour_manual("",
+                      breaks = c("Payoff", "Upper bound", "Lower bound", "Premium (BS)"),
+                      values = c("orange", "blue", "green", "black")) +
+  theme_classic() +
+  labs(x = "Underlying asset price (St)", y = "Payoff") +
+  ggtitle("Payoff vs St (for a European Straddle Option)")
+
+```
+
+Now we repeat the same procedure for a European Straddle Option, using Black-Scholes model to estimate the premium for the option, which is obtained by applying the Black-Scholes formula to a put and a call with same parameters and adding it. It's possible to see that the premium (black) is respecting the bounds traced in the initial graph with the payoffs. The payoff is given by $max(S_t -K, 0) + max(0, K-S_t)$, the upper bound is given by $S_t + K$ and the lower bound is given by $max(S_t - Ke^{-rT}, Ke^{-rT} - S_t)$.
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+
+
