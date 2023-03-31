@@ -1,0 +1,412 @@
+---
+title: "Pricing Financial Derivatives"
+author: "Akash Yadav, Lucas Costa Santos"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load-libraries}
+rm(list = ls())
+library(pracma)
+library(stats)
+pacman::p_load("tidyquant", "tidyverse", "ggplot2", "writexl", "plotly", "readxl")
+Sys.setenv(RETICULATE_PYTHON = "/usr/local/bin/python3")
+RETICULATE_PYTHON="/usr/local/bin/python3"
+library(reticulate)
+```
+
+# Exercise 1
+
+1. To compute the implied volatility, we first write down the time-dependent volatility as a function.
+
+```{r sig_t}
+sig_t <- function(t){
+  a <- ((0.5-t < 1/12)*(0.17) + (1/12 <= 0.5-t & 0.5-t < 3/12)*(0.15) + (3/12 <= 0.5-t & 0.5-t < 5/12)*(0.13) + (0.5-t >= 5/12)*(0.12))
+  ifelse(t>0.5, 0, a)
+}
+```
+
+Recall, implied-volatility is given by
+
+$$
+\bar{\sigma}_{t, T} = \sqrt{\frac{1}{T-t} \int_t^T \sigma_s^2 ds}
+$$
+where $\sigma_s$ is the time dependent volatility. 
+
+```{r squared-volatility}
+sig_sq_t <- function(t){
+  a <- ((0.5-t < 1/12)*(0.17) + (1/12 <= 0.5-t & 0.5-t < 3/12)*(0.15) + (3/12 <= 0.5-t & 0.5-t < 5/12)*(0.13) + (0.5-t >= 5/12)*(0.12))
+  ifelse(t>0.5, 0, a*a)
+}
+```
+
+Since this is a computationally tractable integral, we can write a function to find implied volatility without using integration function from packages. These functions are generally slow and give approximate answers.
+
+
+```{r implied-volatility-computation}
+imp_sig <- function(t){
+  comp <- ((0.5-t < 1/12)*(0.17) + (1/12 <= 0.5-t & 0.5-t < 3/12)*(sqrt((1/(0.5-t))*((0.15*0.15*(5/12 - t)) + (0.17*0.17*(1/12))))) + (3/12 <= 0.5-t & 0.5-t < 5/12)*(sqrt((1/(0.5-t))*((0.13*0.13*(0.25-t)) + (0.15*0.15*(1/6)) + (0.17*0.17*(1/12))))) + (0.5-t >= 5/12)*(sqrt((1/(0.5-t))*((0.12*0.12*((1/12)-t)) + ((0.15*0.15 + 0.13*0.13)*(1/6)) + (0.17*0.17*(1/12))))))
+  ifelse(t>0.5, 0, comp)
+}
+```
+
+Now, we can plot the implied volatility $\bar{\sigma}_{t, T}$.
+
+```{r plot-implied-volatility}
+plot(imp_sig, xlim = c(0, 0.5))
+```
+
+```{r implied-vol-input}
+N <- 1000        # fixing N
+t <- seq(0, 0.5, by = 0.5/(N-1))
+imp_vol_vec <- imp_sig(t) 
+```
+
+```{r plot-imp-vol-vec}
+plot(t, imp_vol_vec, xlim = c(0, 0.5))
+```
+
+2. Next, we fix values for asset price at time $t=0$, interest-rate, $r$, number of time-steps $N$ and simulate several trajectories by running a for-loop through the set seed values.
+
+Recall, Black-Scholes PDE is given by
+
+$$
+dS_t = S_t(\sigma_t dB_t + rdt)
+$$
+Discretizing this equation, we have 
+
+$$
+S_{j \Delta t} = S_{(j-1) \Delta t} + S_{(j-1) \Delta t}\big( \sigma_{(j-1) \Delta t} \sqrt{\Delta t}\ \mathcal{N} (0,1) + r \Delta t \big)
+$$
+since $B_t$ is standard Normal with variance $\Delta t$.
+
+Also, price of European call option struck at $K$ is given by
+
+$$
+C_t = S_t N(d_{1,t}) - Ke^{-r(T-t)}N(d_{2,t})
+$$
+where $N$ is calculated by the *pnorm* function and $d_{1,t}$ and $d_{2,t}$ are as defined in the lecture.
+
+
+```{r params-discrete-SD}
+df_S_C <- data.frame(matrix (ncol = 0, nrow = N)) # empty dataframe to store values
+for(s in c(123:126)){
+  set.seed(s)
+  N <- 1000 # fixed
+  X <- rnorm(N, mean = 0, sd = 1)
+  r <- 0.1 # fixed
+  S <- rep(0, N)
+  C <- rep(0, N)
+  S[1] = 1000
+  K = 200
+  d1 <- rep(0, N)
+  d2 <- rep(0,N)
+  d1[1] <- (log(S[1]/K) + (r + 0.5*imp_vol_vec[1]*imp_vol_vec[1])*(0.5))/imp_vol_vec[1]
+  d2[1] <- (log(S[1]/K) + (r - 0.5*imp_vol_vec[1]*imp_vol_vec[1])*(0.5))/imp_vol_vec[1]
+  C[1] = S[1]*pnorm(d1[1]) - K*exp(-r*0.5)*pnorm(d2[1])
+  
+  # S_0 -> S_{j \Delta t}
+  # \sigma <- implied volatility
+  # T <- T - j \Delta t
+
+  for (i in 2:167){ # time-steps until 1 month
+    S[i] = S[i-1] + S[i-1]*((0.12*sqrt(0.5/N)*X[i-1]) + r*(0.5/N))
+    d1[i] = (log(S[i]/K) + (r + 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    d2[i] = (log(S[i]/K) + (r - 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    C[i] = S[i]*pnorm(d1[i]) - K*exp(-r*0.5)*pnorm(d2[i])
+  }
+  for (i in 168:500){ # time-steps 1 month - 3 months
+    S[i] = S[i-1] + S[i-1]*((0.13*sqrt(0.5/N)*X[i-1]) + r*(0.5/N))
+    d1[i] = (log(S[i]/K) + (r + 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    d2[i] = (log(S[i]/K) + (r - 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    C[i] = S[i]*pnorm(d1[i]) - K*exp(-r*0.5)*pnorm(d2[i])
+  }
+  for (i in 501:834){ # time-steps 3 months - 5 months
+    S[i] = S[i-1] + S[i-1]*((0.15*sqrt(0.5/N)*X[i-1]) + r*(0.5/N))
+    d1[i] = (log(S[i]/K) + (r + 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    d2[i] = (log(S[i]/K) + (r - 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    C[i] = S[i]*pnorm(d1[i]) - K*exp(-r*0.5)*pnorm(d2[i])
+  }
+  for (i in 835:1000){ # time-steps 5 months - 6 months (maturity)
+    S[i] = S[i-1] + S[i-1]*((0.17*sqrt(0.5/N)*X[i-1]) + r*(0.5/N))
+    d1[i] = (log(S[i]/K) + (r + 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    d2[i] = (log(S[i]/K) + (r - 0.5*imp_vol_vec[i]*imp_vol_vec[i])*(0.5))/imp_vol_vec[i]
+    C[i] = S[i]*pnorm(d1[i]) - K*exp(-r*0.5)*pnorm(d2[i])
+  }
+  df_S_C <- cbind.data.frame(df_S_C, S)
+  df_S_C <- cbind.data.frame(df_S_C, C)
+}
+```
+
+```{r rename-columns}
+colnames(df_S_C) <- c("S_1", "C_1", "S_2", "C_2", "S_3", "C_3", "S_4", "C_4")
+```
+
+Plotting sevral trajectories of the stock price and call option price:
+
+```{r plot-stock-price}
+time <- seq(0,0.5, 0.5/(N-1))
+plot(time, df_S_C$S_1, type = "l", col = "black", lwd = 2, ylim = c(600, 1200), ylab = "Price", xlab = "Time", main = "Trajectories based on different seed for S_0=1000 and r=0.2 ")
+lines(time, df_S_C$S_2, type = "l", lwd = 2, col = "red2")
+lines(time, df_S_C$S_3, type = "l", lwd = 2, col = "purple")
+lines(time, df_S_C$S_4, type = "l", lwd = 2, col = "blue2")
+lines(time, df_S_C$C_1, type = "l", lty = 2, col = "black")
+lines(time, df_S_C$C_2, type = "l", lty = 2, col = "red2")
+lines(time, df_S_C$C_3, type = "l", lty = 2, col = "purple")
+lines(time, df_S_C$C_4, type = "l", lty = 2, col = "blue2")
+legend("topleft", legend=c("S_t", "C_t"), lty = 1:2, cex=1.2)
+grid(nx = NULL, ny = NULL, lty = 3, col = "gray", lwd = 0.5)
+abline(h=1000,lty=2)
+```
+
+Upon calculating the difference between the asset price and call option price, we observe this is constant for a fixed interest rate and strike price. This is in fact equal to $Ke^{-rT}$. This is because for both d1 and d2 values, pnorm $\approx 1$.
+
+```{r diff-between S_t and C_t}
+diff <- df_S_C$S_1 - df_S_C$C_1
+diff[1]
+```
+
+
+
+
+
+# Exercise 2
+
+We created a function that collect only the calls data for all the dates provided in the vector list and outputs a dataframe with the data for that call in the dates specified. Since we collected the data before 24/03/2023 if anyone tries to run the code it's necessary delete dates before the current day because the data is no longer available.
+
+```{r, getting the data}
+# vector of dates
+dates <- c("2023-03-24", "2023-03-31", "2023-04-21", "2023-06-16")
+
+# creating a function that gets the data only for the calls
+get_datachain <- function(ticker, dates) {
+  chains <- data.frame()
+  for (date in dates) {
+    data <- getOptionChain(ticker, Exp = date)
+    chains <- rbind(chains, data$calls)
+  }
+  return(chains)
+}
+
+# dataset with the option chains
+dados <- get_datachain("SCHW", dates)
+glimpse(dados)
+
+# exporting the dataset to replicate if necessary
+write_csv(dados, "/Users/akash/Desktop/Pricing Financial Derivatives/SCHW.csv")
+
+
+# Importing stock price
+getSymbols("SCHW", from = '2023-01-01',
+           to = Sys.Date(),warnings = FALSE,
+           auto.assign = TRUE)
+Stock_price <- data.frame(date = index(SCHW), value = coredata(SCHW)) # convert the subset xts object into a dataframe
+Stock_price <- Stock_price %>% filter(date > "2023-03-01")
+
+
+# Importing the interest rates
+
+#1 Fed Fund Rates - for short maturity
+getSymbols(Symbols = 'FEDFUNDS',  src = "FRED", adjust=TRUE)
+
+FFUD <- data.frame(date = index(FEDFUNDS), value = coredata(FEDFUNDS)) # convert the subset xts object into a dataframe
+FFUD <- FFUD %>% filter(date > "2022-01-01")
+
+#2 one-month treasury rate
+
+getSymbols("DGS1MO", src = "FRED")
+
+one_mon <- data.frame(date = index(DGS1MO), value = coredata(DGS1MO))
+one_mon <- one_mon %>% filter(date > "2023-01-01")
+
+#3 three-month treasury rate
+
+getSymbols("DGS3MO", src = "FRED")
+
+three_mon <- data.frame(date = index(DGS3MO), value = coredata(DGS3MO))
+three_mon <- three_mon %>% filter(date > "2023-01-01")
+
+#4 one-year treasury rate
+getSymbols("DGS1", src = "FRED")
+
+one_year <- data.frame(date = index(DGS1), value = coredata(DGS1))
+one_year <- one_year %>% filter(date > "2023-01-01")
+```
+
+
+
+```{r, question 2a}
+
+price <- tail(Stock_price$value.SCHW.Close, 1)
+
+
+# function for subset and plot
+subset_n_plot <- function(sub_dados, date){
+  object <- sub_dados %>% filter(Expiration == as.Date(date))
+  ggplot(data = object, aes(x= Strike)) +
+    geom_point(aes(y = IV)) +
+    labs(x = "Strike", y = "Implied Volatility") +
+    ggtitle(paste("Implied volatility for the options that expires in", date)) +
+    theme_classic()
+}
+
+
+subset_n_plot(dados, "2023-03-24")# one day
+subset_n_plot(dados, "2023-03-31")# one week
+subset_n_plot(dados, "2023-04-21")# one month
+subset_n_plot(dados, "2023-06-16")# three months
+
+
+
+# facet_wrap for plot different dates in the same plot
+
+ggplot(data = dados, aes(x = Strike, y = IV)) +
+  geom_point() +
+  geom_vline(aes(xintercept = price), color = "red", linetype='dashed') +
+  labs(x = "Strike", y = "Implied Volatility") +
+  theme_classic() +
+  facet_wrap(~ Expiration)
+
+```
+According to the plots it's not so clear observing a "volatility smile", even for the shortest maturity options. The options that are close from the price (represented by the red dashed line) report an IV smaller than the long term options, specially for the options that expires in 24/03/2023. From options that expires in more than one month the implied volatility doesn't vary much for different strikes.
+
+
+
+For the question 2b) to plot the volatility surface we used the python package for all maturities available on Yahoo Finance website
+```{python, question 2b}
+
+# dependencies
+import matplotlib.pyplot as plt
+import yfinance as yf
+import numpy as np
+from mpl_toolkits import mplot3d
+from datetime import datetime
+from itertools import chain
+from matplotlib import cm
+
+# choose a ticker and get data via yahoofinance
+ticker = "SCHW"
+stock = yf.Ticker(ticker)
+# store maturities
+lMaturity = list(stock.options)
+
+# get current date
+today = datetime.now().date()
+# empty list for days to expiration
+lDTE = []
+# empty list to store data for calls
+lData_calls = []
+# loop over maturities
+for maturity in lMaturity:
+    # maturity date
+    maturity_date = datetime.strptime(maturity, '%Y-%m-%d').date()
+    # DTE: difference between maturity date and today
+    lDTE.append((maturity_date - today).days)
+    # store call data
+    lData_calls.append(stock.option_chain(maturity).calls)
+
+# create empty lists to contain unlisted data
+lStrike = []
+lDTE_extended = []
+lImpVol = []
+for i in range(0,len(lData_calls)):
+    # append strikes to list
+    lStrike.append(lData_calls[i]["strike"])
+    # repeat DTE so the list has same length as the other lists
+    lDTE_extended.append(np.repeat(lDTE[i], len(lData_calls[i])))
+    # append implied volatilities to list
+    lImpVol.append(lData_calls[i]["impliedVolatility"])
+    
+# unlist list of lists
+lStrike = list(chain(*lStrike))
+lDTE_extended = list(chain(*lDTE_extended))
+lImpVol = list(chain(*lImpVol))
+
+
+# initiate figure
+fig = plt.figure(figsize=(7,7))
+# set projection to 3d
+axs = plt.axes(projection="3d")
+# use plot_trisurf from mplot3d to plot surface and cm for color scheme
+axs.plot_trisurf(lDTE_extended, lStrike, lImpVol, cmap=cm.jet)
+axs.invert_xaxis()
+
+# change angle
+axs.view_init(30, 65)
+# add labels
+plt.xlabel("Days to Maturity")
+plt.ylabel("Strike Price")
+plt.title(f"Volatility Surface for {ticker}: IV as a Function of K and T")
+plt.show()
+
+```
+
+It's possible to see that the implied volatility is higher for the call options with less than 200 days for maturity and strike between 100 and 40. The calls that are about to expire and are far from the current stock price of $56.4 (in this case In-the-Money or Out-the-Money) also consists in a region with high implied volatility.
+
+
+
+
+```{r, question 2c}
+#All possible dates
+#dates <- c(2023-03-24, 2023-03-31, 2023-04-06, 2023-04-14, 2023-04-21, 2023-04-28, 2023-05-19, 2023-06-16, 2023-09-15, 2024-01-19, 2024-03-15, 2024-06-21, 2025-01-17)
+
+dates <- c("2023-03-24", "2023-03-31", "2023-04-21", "2023-06-16", "2023-09-15", "2024-03-15")
+
+dados <- get_datachain("SCHW", dates)
+
+
+# defining the correct interest rates
+i_1 <- as.numeric(tail(FFUD[2], 1))/100
+i_2 <- as.numeric(tail(one_mon[2], 1))/100
+i_3 <- as.numeric(tail(three_mon[2], 1))/100
+i_4 <- as.numeric(tail(one_year[2], 1))/100
+
+
+# Set the threshold dates
+threshold_dates <- c(as.Date("2023-03-24"), as.Date("2023-03-31"), as.Date("2023-04-21"), 
+                     as.Date("2023-06-16"), as.Date("2023-09-15"), as.Date("2024-03-15"))
+
+dados$i_rate <- 0
+dados$i_rate <- case_when(
+  dados$Expiration < threshold_dates[2] ~ i_1,
+  dados$Expiration < threshold_dates[4] ~ i_2,
+  dados$Expiration < threshold_dates[5] ~ i_3,
+  TRUE ~ i_4
+)
+
+
+# Load option price and implied volatility data
+options_data <- dados
+options_data$S <- price
+options_data$Maturity <- as.numeric(difftime(options_data$Expiration, Sys.Date(), units = "days"))
+
+# Define Black-Scholes price function
+bs_call <- function(S, K, T, r, sigma) {
+  d1 <- (log(S/K) + (r + 0.5 * sigma^2) * T) / (sigma * sqrt(T))
+  d2 <- d1 - sigma * sqrt(T)
+  S * pnorm(d1) - K * exp(-r * T) * pnorm(d2)
+}
+
+# Calculate Black-Scholes prices for each option
+options_data <- options_data %>%
+  mutate(bs_price = bs_call(S, Strike, Maturity/365.25, r = i_rate, sigma = IV))
+
+# Plot market and Black-Scholes prices
+ggplot(options_data, aes(x = Strike, y = Last)) +
+  geom_point(alpha= 0.6) +
+  geom_point(aes(y = bs_price), color = "blue", alpha = 0.3) +
+  labs(x = "Strike", y = "Option Price") +
+  facet_wrap(~ Expiration)
+
+```
+
+To build this graph we estimated the price of a call option for the stock SCHW using the Black-Scholes model, the price of the call was the last one traded. The risk-free rate used was according to the maturity of the call, for calls with less than 1 month the risk-free was the FedFunds rate, for 1 month and less than 3 months the rate as the 1-month treasury rate, for calls with expiration date longer than 3 months and less than 1 year the 3-month treasury rate was used and for the other cases the 1-year treasury rate. According to the graph, it's possible to see some changes between the estimated price with Black-Scholes and the last price traded for the call, interpreted as market price in this exercise, for options with expiration dates longer than 6 months.
+
+
+
+
+
